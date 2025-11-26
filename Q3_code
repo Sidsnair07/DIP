@@ -1,0 +1,47 @@
+from PIL import Image
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load image and convert to grayscale
+img_path = r"C:/Users/sabuc/Downloads/dip_image.jpg"
+img = np.array(Image.open(img_path).convert("L"))
+
+# Define scales for downsampling
+scales = [2, 4, 8, 16]
+
+# Spatial downsampling
+spatial_results = [img[::s, ::s] for s in scales]
+
+# Frequency domain processing
+F = np.fft.fft2(img)
+Fshift = np.fft.fftshift(F)
+freq_results = []
+
+for s in scales:
+    rows, cols = img.shape
+    crow, ccol = rows // 2, cols // 2
+    r = min(crow // s, ccol // s)
+    mask = np.zeros_like(Fshift)
+    mask[crow - r:crow + r, ccol - r:ccol + r] = 1
+    F_low = Fshift * mask
+    img_low = np.real(np.fft.ifft2(np.fft.ifftshift(F_low)))
+    freq_results.append(img_low)
+
+# Plot results
+plt.figure(figsize=(12, 6))
+titles = ["1/2", "1/4", "1/8", "1/16"]
+
+for i, r in enumerate(spatial_results):
+    plt.subplot(2, 4, i + 1)
+    plt.imshow(r, cmap='gray')
+    plt.title("Spatial " + titles[i])
+    plt.axis('off')
+
+for i, r in enumerate(freq_results):
+    plt.subplot(2, 4, 4 + i + 1)
+    plt.imshow(r, cmap='gray')
+    plt.title("Frequency " + titles[i])
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
