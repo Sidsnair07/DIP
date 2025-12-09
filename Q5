@@ -1,0 +1,133 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -------------------------
+# 1. Read the color image
+# -------------------------
+img = cv2.imread("torgya_festival.jpg")
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+print("Image Loaded:", img.shape)
+
+# ------------------------------
+# Helper: Box Filter
+# ------------------------------
+def box_filter(img, ksize=5, normalized=False):
+    kernel = np.ones((ksize, ksize), dtype=np.float32)
+    if normalized:
+        kernel = kernel / (ksize * ksize)
+
+    output = np.zeros_like(img)
+
+    for ch in range(3):
+        output[:, :, ch] = cv2.filter2D(img[:, :, ch], -1, kernel)
+
+    return output
+
+# ------------------------------
+# Helper: Gaussian 1D Kernel
+# ------------------------------
+def gaussian_1d_kernel(size):
+    sigma = size / 6.0
+    ax = np.linspace(-(size // 2), size // 2, size)
+    kernel = np.exp(-(ax**2) / (2 * sigma**2))
+    return kernel
+
+# ---------------------------------------
+# Separable Gaussian (Unnormalized)
+# ---------------------------------------
+def gaussian_separable(img, size):
+    g = gaussian_1d_kernel(size)
+    g = g.reshape(1, -1)
+    gT = g.T
+
+    output = np.zeros_like(img)
+
+    for ch in range(3):
+        temp = cv2.filter2D(img[:, :, ch], -1, g)
+        output[:, :, ch] = cv2.filter2D(temp, -1, gT)
+
+    return output
+
+# ---------------------------------------
+# Separable Gaussian (Normalized)
+# ---------------------------------------
+def gaussian_separable_normalized(img, size):
+    g = gaussian_1d_kernel(size)
+    g = g / g.sum()
+    g = g.reshape(1, -1)
+    gT = g.T
+
+    output = np.zeros_like(img)
+
+    for ch in range(3):
+        temp = cv2.filter2D(img[:, :, ch], -1, g)
+        output[:, :, ch] = cv2.filter2D(temp, -1, gT)
+
+    return output
+
+
+# ---------------------
+# APPLY ALL FILTERS
+# ---------------------
+
+box_5 = box_filter(img, 5, normalized=False)
+box_5_norm = box_filter(img, 5, normalized=True)
+
+box_20 = box_filter(img, 20, normalized=False)
+box_20_norm = box_filter(img, 20, normalized=True)
+
+gauss_sep = gaussian_separable(img, 21)
+gauss_sep_norm = gaussian_separable_normalized(img, 21)
+
+
+# ------------------------
+# DISPLAY IMAGES (BLACK BG)
+# ------------------------
+
+titles = [
+    "Original Image",
+    "5×5 Box Filter",
+    "5×5 Box Filter (Normalized)",
+    "20×20 Box Filter",
+    "20×20 Box Filter (Normalized)",
+    "Gaussian Separable",
+    "Gaussian Separable (Normalized)"
+]
+
+images = [
+    img,
+    box_5,
+    box_5_norm,
+    box_20,
+    box_20_norm,
+    gauss_sep,
+    gauss_sep_norm
+]
+
+plt.figure(figsize=(15, 12))
+plt.style.use("dark_background")    # Entire plot uses dark background
+
+for i, (title, image) in enumerate(zip(titles, images)):
+    ax = plt.subplot(3, 3, i + 1)
+    ax.set_facecolor("black")       # subplot background
+    plt.imshow(image)
+    plt.title(title, color="white") # white text title
+    plt.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+
+# ------------------------
+# SAVE OUTPUTS
+# ------------------------
+
+cv2.imwrite("box_5.png", cv2.cvtColor(box_5, cv2.COLOR_RGB2BGR))
+cv2.imwrite("box_5_normalized.png", cv2.cvtColor(box_5_norm, cv2.COLOR_RGB2BGR))
+cv2.imwrite("box_20.png", cv2.cvtColor(box_20, cv2.COLOR_RGB2BGR))
+cv2.imwrite("box_20_normalized.png", cv2.cvtColor(box_20_norm, cv2.COLOR_RGB2BGR))
+cv2.imwrite("gaussian_separable.png", cv2.cvtColor(gauss_sep, cv2.COLOR_RGB2BGR))
+cv2.imwrite("gaussian_separable_normalized.png", cv2.cvtColor(gauss_sep_norm, cv2.COLOR_RGB2BGR))
+
+print("All filters applied, displayed on black background, and saved.")
