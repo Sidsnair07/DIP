@@ -1,4 +1,4 @@
 # DIP
-# Q1-3 – Image Quantization
+# Assignment Code
 This repository contains code for questions.
 
