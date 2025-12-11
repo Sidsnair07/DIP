@@ -1,0 +1,60 @@
+from PIL import Image
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -----------------------------------------
+# HELPER FUNCTION TO DISPLAY IMAGES
+# -----------------------------------------
+def show(title, image):
+    plt.figure(figsize=(4,4))
+    plt.imshow(image, cmap='gray')
+    plt.title(title)
+    plt.axis("off")
+    plt.show()
+
+# -----------------------------------------
+# LOAD LOW-LIGHT AND BRIGHT-LIGHT IMAGES
+# -----------------------------------------
+low_light = Image.open("C:/Users/sabuc/Downloads/low light_dip.PNG").convert("L")
+bright_light = Image.open("C:/Users/sabuc/Downloads/bright light.PNG").convert("L")
+
+show("Low Light Image", low_light)
+show("Bright Light Image", bright_light)
+
+# -----------------------------------------
+# FUNCTION: BIT-PLANE SLICING + RECONSTRUCTION + DIFFERENCE
+# -----------------------------------------
+def bitplane_process(image, label):
+    arr = np.array(image)
+    
+    # 1. Extract 8 bit-planes
+    planes = []
+    for i in range(8):
+        plane = ((arr >> i) & 1) * 255
+        planes.append(plane.astype("uint8"))
+        show(f"{label} - Bit Plane {i}", plane)
+    
+    # 2. Reconstruct image using lowest 3 planes (0,1,2)
+    reconstructed = ((planes[0]//255)*1 + (planes[1]//255)*2 + (planes[2]//255)*4).astype("uint8")
+    show(f"{label} - Reconstructed (Lowest 3 planes)", reconstructed)
+    
+    # 3. Difference from original
+    difference = arr - reconstructed
+    difference = np.clip(difference, 0, 255).astype("uint8")
+    show(f"{label} - Difference Image", difference)
+    
+    # 4. Save outputs
+    Image.fromarray(reconstructed).save(f"C:/Users/sabuc/Downloads/reconstruct_{label}.jpg")
+    Image.fromarray(difference).save(f"C:/Users/sabuc/Downloads/difference_{label}.jpg")
+
+# -----------------------------------------
+# PROCESS LOW-LIGHT IMAGE
+# -----------------------------------------
+bitplane_process(low_light, "LowLight")
+
+# -----------------------------------------
+# PROCESS BRIGHT-LIGHT IMAGE
+# -----------------------------------------
+bitplane_process(bright_light, "BrightLight")
+
+print("All bit-plane, reconstruction, and difference images generated successfully!")
