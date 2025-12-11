@@ -1,0 +1,143 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import sys
+
+# --- 1. CONFIGURATION AND IMAGE LOADING (Google Drive Paths) ---
+exposure_times = np.array([1/120.0, 1/60.0, 1/30.0, 1/15.0], dtype=np.float32) 
+
+# List of image file paths located in your Google Drive
+img_files = [
+    '/content/drive/MyDrive/1.jpg',
+    '/content/drive/MyDrive/2.jpg',
+    '/content/drive/MyDrive/3.png',
+    '/content/drive/MyDrive/4.png'
+]
+
+# --- Load Images ---
+img_list = []
+print("Starting HDR processing using Google Drive paths...")
+print("--------------------------------------------------")
+
+for filename in img_files:
+    # Use cv2.IMREAD_COLOR (value 1) to explicitly force loading as 3-channel BGR.
+    img_bgr = cv2.imread(filename, cv2.IMREAD_COLOR)
+    
+    if img_bgr is None:
+        print(f"FATAL ERROR: Could not find or load image file: {filename}")
+        print("Please ensure Google Drive is mounted and the path/name is correct.")
+        raise FileNotFoundError(f"Image not found or could not be loaded: {filename}")
+
+    # Convert BGR (OpenCV default) to RGB for consistent display and processing
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    img_list.append(img_rgb)
+    
+print(f"Loaded {len(img_list)} images successfully.")
+
+# --- SYNCHRONIZE IMAGE DIMENSIONS ---
+if img_list:
+    target_height, target_width, _ = img_list[0].shape
+    
+    for i in range(1, len(img_list)):
+        current_img = img_list[i]
+        h, w, _ = current_img.shape
+        
+        if h != target_height or w != target_width:
+            print(f"⚠ Resizing {os.path.basename(img_files[i])} from ({w}x{h}) to target size ({target_width}x{target_height}).")
+            resized_img = cv2.resize(current_img, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+            img_list[i] = resized_img
+        
+    print("Image dimensions synchronized for HDR processing.")
+
+print(f"Using exposure times (seconds): {exposure_times}")
+
+# Display the input images for verification
+fig, axes = plt.subplots(1, len(img_list), figsize=(16, 4))
+fig.suptitle('Input LDR Images (Dimensions Synchronized)', fontsize=16)
+for i, img in enumerate(img_list):
+    ax = axes[i] if len(img_list) > 1 else axes
+    ax.imshow(img)
+    base_name = os.path.basename(img_files[i])
+    ax.set_title(f'{base_name}\n$t = {exposure_times[i]:.4f}s$') 
+    ax.axis('off')
+plt.show()
+
+print("--------------------------------------------------")
+
+# --- 2. CAMERA RESPONSE FUNCTION (CRF) & IRRADIANCE MAP RECOVERY ---
+
+# A. Estimation of the Camera Response Function (CRF)
+calibrate = cv2.createCalibrateDebevec()
+response_map = calibrate.process(img_list, exposure_times)
+
+print("✅ Step 1: Camera Response Function (CRF) Estimated.")
+
+# B. Computation of the Irradiance Map (HDR Radiance Map)
+merge_debevec = cv2.createMergeDebevec()
+hdr_image = merge_debevec.process(img_list, exposure_times, response_map)
+
+print("✅ Step 2: High Dynamic Range (HDR) Irradiance Map Computed.")
+
+# --- Visualization of the Estimated CRF (FIXED FOR 1 OR 3 CHANNELS) ---
+plt.figure(figsize=(8, 6))
+
+num_channels = response_map.shape[1]
+
+x = np.arange(256)
+if num_channels == 3:
+    # Plotting for R, G, B channels
+    g_R = response_map[:, 0]
+    g_G = response_map[:, 1]
+    g_B = response_map[:, 2]
+
+    plt.plot(x, g_R, 'r-', label='Red Channel')
+    plt.plot(x, g_G, 'g-', label='Green Channel')
+    plt.plot(x, g_B, 'b-', label='Blue Channel')
+    plt.title('Estimated Camera Response Function (Color)')
+    
+elif num_channels == 1:
+    # Plotting for a single Grayscale channel
+    g_Gray = response_map[:, 0]
+    
+    plt.plot(x, g_Gray, 'k-', label='Grayscale Channel')
+    plt.title('Estimated Camera Response Function (Grayscale)')
+    
+else:
+    print(f"Warning: Skipping CRF plot. Unexpected number of channels: {num_channels}")
+    
+plt.xlabel('Pixel Value (Z)')
+plt.ylabel('Log Exposure ($g(Z)$)')
+plt.legend()
+plt.grid(True)
+plt.show()
+ # Keeping this placeholder for instructional diagram
+
+
+print("--------------------------------------------------")
+
+# --- 3. GLOBAL TONE MAPPING ALGORITHM ---
+
+print("Applying Global Tone Mapping...")
+gamma_value = 2.2 
+tonemap_global = cv2.createTonemap(gamma=gamma_value) 
+
+ldr_image_global = tonemap_global.process(hdr_image.copy())
+
+# Convert the LDR image from float values [0, 1] to 8-bit integer [0, 255]
+ldr_image_8bit = np.clip(ldr_image_global * 255, 0, 255).astype('uint8')
+
+print("✅ Step 3: Global Tone Mapping Applied.")
+
+# --- Display Final Result ---
+plt.figure(figsize=(10, 8))
+plt.imshow(ldr_image_8bit)
+plt.title(f'Final HDR Image (Global Tone Mapped, $\gamma={gamma_value}$)')
+plt.axis('off')
+plt.show()
+ # Keeping this placeholder for instructional diagram
+
+# --- Optional: Save the Final Image to Google Drive ---
+output_filename = "/content/drive/MyDrive/final_hdr_image_corrected_v4.png"
+cv2.imwrite(output_filename, cv2.cvtColor(ldr_image_8bit, cv2.COLOR_RGB2BGR))
+print(f"Final LDR image saved to Google Drive: {output_filename}")
